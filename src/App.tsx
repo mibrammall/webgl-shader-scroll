@@ -160,7 +160,7 @@ class ScrollState {
       width: window.innerWidth,
       height: window.innerHeight,
     };
-
+    // Testing to see if we have sotpped the annoying sound on pushing to gh
     this._camera.aspect = this._viewport.width / this._viewport.height;
     this._camera.updateProjectionMatrix();
 
