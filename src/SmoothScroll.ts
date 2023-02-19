@@ -30,11 +30,14 @@ export default class {
 
   update() {
     this._scroll.hard = window.scrollY;
+    console.log(window.scrollY);
+    console.log(this._scroll.limit);
     this._scroll.hard = GSAP.utils.clamp(
       0,
       this._scroll.limit,
       this._scroll.hard
     );
+
     this._scroll.soft = GSAP.utils.interpolate(
       this._scroll.soft,
       this._scroll.hard,

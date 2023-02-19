@@ -3,6 +3,7 @@ import {
   AdditiveBlending,
   BufferGeometry,
   IcosahedronGeometry,
+  IUniform,
   Mesh,
   PerspectiveCamera,
   Scene,
@@ -17,13 +18,16 @@ import fragmentShader from "./shaders/frag.glsl";
 import GSAP from "gsap";
 import SmoothScroll from "./SmoothScroll";
 import { Scroll } from "./types";
+import { Section } from "./Components/Section";
 
 const sections = ["Logma", "Naos", "Chara"];
 
 function App(): ReactElement {
   const container = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (!container.current) {
+    if (!container.current || !content.current) {
       return;
     }
 
@@ -31,7 +35,7 @@ function App(): ReactElement {
       return;
     }
 
-    let scrollstate = new ScrollState(container.current);
+    let scrollstate = new ScrollState(container.current, content.current);
 
     return () => {
       scrollstate.dispose();
@@ -40,28 +44,12 @@ function App(): ReactElement {
   return (
     <>
       <div className="scroll__stage">
-        <div className="scroll__content">
+        <div ref={content} className="scroll__content">
           {sections.map((title, index) => (
             <Section section={title} index={index} />
           ))}
         </div>
         <div ref={container}></div>
-      </div>
-    </>
-  );
-}
-
-interface SectionProps {
-  section: string;
-  index: number;
-}
-
-function Section({ section, index }: SectionProps): ReactElement<SectionProps> {
-  return (
-    <>
-      <div className="section section__title">
-        <h1 className="section__title-number">{index + 1}</h1>
-        <h2 className="section__title-title">{section}</h2>
       </div>
     </>
   );
@@ -76,14 +64,16 @@ class ScrollState {
   private readonly _renderer: WebGLRenderer;
   private readonly _scene: Scene;
   private readonly _camera: PerspectiveCamera;
-  private _viewport: ViewPort;
   private readonly _material: ShaderMaterial;
   private readonly _geometry: BufferGeometry;
   private readonly _mesh: Mesh<BufferGeometry, ShaderMaterial>;
   private readonly _smoothScroll: SmoothScroll;
-  private _scroll: Scroll;
 
-  constructor(element: HTMLDivElement) {
+  private _viewport: ViewPort;
+  private _scroll: Scroll;
+  private _settings: Settings;
+
+  constructor(element: HTMLDivElement, content: HTMLDivElement) {
     this._renderer = new WebGLRenderer({
       antialias: true,
     });
@@ -103,7 +93,9 @@ class ScrollState {
 
     this._camera.position.set(0, 0, 2.5);
 
-    this._geometry = new IcosahedronGeometry(1, 16);
+    this._geometry = new IcosahedronGeometry(1, 64);
+
+    this._settings = makeDefaultSettings();
 
     this._material = new ShaderMaterial({
       wireframe: true,
@@ -111,14 +103,7 @@ class ScrollState {
       transparent: true,
       vertexShader,
       fragmentShader,
-      uniforms: {
-        uFrequency: { value: 0 },
-        uAmplitude: { value: 0 },
-        uDensity: { value: 0 },
-        uStrength: { value: 0.2 },
-        uDeepPurple: { value: 0.2 },
-        uOpacity: { value: 1 },
-      },
+      uniforms: makeInitialUniforms(this._settings),
     });
 
     this._mesh = new Mesh(this._geometry, this._material);
@@ -130,8 +115,9 @@ class ScrollState {
       scroll: this._scroll,
       viewport: this._viewport,
       element,
-      scrollContent: element,
+      scrollContent: content,
     });
+
     this.onResize();
     this.update();
   }
@@ -187,9 +173,10 @@ class ScrollState {
     console.log(x, y);
   };
 
-  onScroll = (event: Event) => {
+  onScroll = () => {
     if (!this._scroll.running) {
-      window.requestAnimationFrame(this.update);
+      this._scroll.running = true;
+      window.requestAnimationFrame(this.updateScrollAnimations);
     }
   };
 
@@ -202,9 +189,29 @@ class ScrollState {
   }
 
   update = () => {
+    this._mesh.rotation.y += 0.01;
     this._smoothScroll.update();
     this.render();
     requestAnimationFrame(this.update);
+  };
+
+  updateScrollAnimations = () => {
+    this._scroll.normalized = this._scroll.hard / this._scroll.limit;
+    GSAP.to(this._mesh.rotation, {
+      x: this._scroll.normalized * Math.PI,
+    });
+    for (const key in this._settings) {
+      /** @ts-ignore */
+      const setting: Setting = this._settings[key];
+      if (setting.start !== setting.end) {
+        GSAP.to(this._mesh.material.uniforms[key], {
+          value:
+            setting.start +
+            this._scroll.normalized * (setting.end - setting.start),
+        });
+      }
+    }
+    this._scroll.running = false;
   };
 }
 
@@ -217,6 +224,64 @@ function makeDefaultScroll(): Scroll {
     ease: 0.05,
     normalized: 0,
     running: false,
+  };
+}
+
+interface Setting {
+  start: number;
+  end: number;
+}
+interface Settings {
+  uFrequency: Setting;
+  uAmplitude: Setting;
+  uDensity: Setting;
+  uStrength: Setting;
+  uDeepPurple: Setting;
+  uOpacity: Setting;
+}
+
+function makeInitialUniforms(settings: Settings) {
+  const keys = Object.keys(settings);
+
+  const uniforms: { [key: string]: IUniform<any> } = {};
+
+  keys.forEach((key) => {
+    /** @ts-ignore */
+    uniforms[key] = { value: (settings[key] as Setting).start };
+  });
+
+  return uniforms;
+}
+
+function makeDefaultSettings(): Settings {
+  return {
+    uFrequency: {
+      start: 0,
+      end: 4,
+    },
+    uAmplitude: {
+      start: 4,
+      end: 4,
+    },
+    uDensity: {
+      start: 1,
+      end: 1,
+    },
+    uStrength: {
+      start: 0,
+      end: 1.1,
+    },
+    // fragment
+    uDeepPurple: {
+      // max 1
+      start: 1,
+      end: 0,
+    },
+    uOpacity: {
+      // max 1
+      start: 0.1,
+      end: 0.66,
+    },
   };
 }
 
