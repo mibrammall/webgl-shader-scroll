@@ -11,14 +11,16 @@
   padding: 8rem;
   color: white;
   background-color: black;
+  pointer-events: none;
+  user-select: none;
 }
 
-.section__title_number {
-
-}
-
-.section__title_title {
-  
+.scroll__content {
+  top: 0;
+  left: 0;
+  width: 100%;
+  position: absolute;
+  will-change: transform;
 }
 
 .webgl {

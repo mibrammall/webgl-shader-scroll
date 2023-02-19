@@ -3,7 +3,6 @@ import {
   AdditiveBlending,
   BufferGeometry,
   IcosahedronGeometry,
-  Material,
   Mesh,
   PerspectiveCamera,
   Scene,
@@ -16,8 +15,8 @@ import vertexShader from "./shaders/vert.glsl";
 import fragmentShader from "./shaders/frag.glsl";
 
 import GSAP from "gsap";
-
-console.log(vertexShader);
+import SmoothScroll from "./SmoothScroll";
+import { Scroll } from "./types";
 
 const sections = ["Logma", "Naos", "Chara"];
 
@@ -61,7 +60,7 @@ function Section({ section, index }: SectionProps): ReactElement<SectionProps> {
   return (
     <>
       <div className="section section__title">
-        <h1 className="section__title-number">{index}</h1>
+        <h1 className="section__title-number">{index + 1}</h1>
         <h2 className="section__title-title">{section}</h2>
       </div>
     </>
@@ -78,9 +77,11 @@ class ScrollState {
   private readonly _scene: Scene;
   private readonly _camera: PerspectiveCamera;
   private _viewport: ViewPort;
-  private _material: ShaderMaterial;
-  private _geometry: BufferGeometry;
-  private _mesh: Mesh<BufferGeometry, ShaderMaterial>;
+  private readonly _material: ShaderMaterial;
+  private readonly _geometry: BufferGeometry;
+  private readonly _mesh: Mesh<BufferGeometry, ShaderMaterial>;
+  private readonly _smoothScroll: SmoothScroll;
+  private _scroll: Scroll;
 
   constructor(element: HTMLDivElement) {
     this._renderer = new WebGLRenderer({
@@ -120,18 +121,22 @@ class ScrollState {
       },
     });
 
-    // this._material = new MeshNormalMaterial({
-    //   // color: 0xff00ff,
-    //   wireframe: true,
-    // });
     this._mesh = new Mesh(this._geometry, this._material);
     this._scene.add(this._mesh);
     this.addEventListeners();
+    this._scroll = makeDefaultScroll();
+
+    this._smoothScroll = new SmoothScroll({
+      scroll: this._scroll,
+      viewport: this._viewport,
+      element,
+      scrollContent: element,
+    });
+    this.onResize();
     this.update();
   }
 
   dispose() {
-    this._scene.children.forEach((child) => {});
     this._geometry.dispose();
     this._material.dispose();
     this._renderer.dispose();
@@ -146,7 +151,8 @@ class ScrollState {
 
   addEventListeners() {
     window.addEventListener("resize", this.onResize);
-    window.addEventListener("mousemove", this.onMouseMove); // enable for soundcheck (→ console)
+    // window.addEventListener("mousemove", this.onMouseMove); // enable for soundcheck (→ console)
+    window.addEventListener("scroll", this.onScroll);
   }
 
   onResize = () => {
@@ -157,6 +163,14 @@ class ScrollState {
 
     this._camera.aspect = this._viewport.width / this._viewport.height;
     this._camera.updateProjectionMatrix();
+
+    this._smoothScroll.onResize();
+
+    if (this._viewport.width < this._viewport.height) {
+      this._mesh.scale.set(0.75, 0.75, 0.75);
+    } else {
+      this._mesh.scale.set(1, 1, 1);
+    }
 
     this._renderer.setSize(this._viewport.width, this._viewport.height);
     this._renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -173,6 +187,12 @@ class ScrollState {
     console.log(x, y);
   };
 
+  onScroll = (event: Event) => {
+    if (!this._scroll.running) {
+      window.requestAnimationFrame(this.update);
+    }
+  };
+
   /**
    * Rendering
    */
@@ -182,8 +202,21 @@ class ScrollState {
   }
 
   update = () => {
+    this._smoothScroll.update();
     this.render();
     requestAnimationFrame(this.update);
+  };
+}
+
+function makeDefaultScroll(): Scroll {
+  return {
+    height: 0,
+    limit: 0,
+    hard: 0,
+    soft: 0,
+    ease: 0.05,
+    normalized: 0,
+    running: false,
   };
 }
 
